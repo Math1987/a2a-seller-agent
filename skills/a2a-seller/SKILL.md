@@ -7,17 +7,28 @@ description: Installer et utiliser a2a-seller-agent pour publier plusieurs objet
 
 Utiliser la bibliothèque déterministe pour exécuter les intentions du propriétaire. Le modèle comprend la demande et prépare les paramètres ; le programme gère le stockage, les prix et les états. Ne pas réécrire un serveur ou un parseur de prix lorsque la bibliothèque est disponible.
 
+## Partir d’une demande et du lien du dépôt
+
+Une demande telle que « Je veux vendre une tasse artisanale à 50 euros, prix minimum 30 euros. Utilise ce dépôt et mets-la en vente » suffit à déclencher ce parcours. Ne pas demander au propriétaire de nommer le skill ou de recopier les commandes.
+
+1. Reprendre les informations déjà fournies : titre, prix affiché, plancher privé, devise, état, localisation et modalités de remise. Pour cet exemple, utiliser `Tasse artisanale`, `50`, `30` et `EUR`. Ne jamais exposer le plancher dans la description ou le catalogue.
+2. Une intention explicite de vendre correspond à une annonce réelle (`--real`). Réserver la simulation aux demandes de démonstration ou de test. Ne pas redemander une autorisation de publication déjà donnée ; obtenir les précisions nécessaires n’est pas une nouvelle approbation.
+3. Avant de publier, demander les informations manquantes qui rendent l’annonce exploitable : l’état et les défauts connus, la ville ou zone publique et les modalités de remise ou de livraison souhaitées. Grouper ces questions dans un seul message selon les possibilités de l’hôte. Ne pas demander une adresse exacte pour le catalogue. Une réponse « état inconnu » peut être conservée telle quelle ; ne pas transformer une inconnue en promesse.
+4. Demander également tout prix manquant ou devise ambiguë. Les photos, dimensions, marque et autres détails sont facultatifs, sauf s’ils sont nécessaires pour identifier l’objet ou si le propriétaire les demande. Ne pas inventer de matière, de dimensions, de frais de livraison ni de propriétés telles que la compatibilité alimentaire d’une tasse. Le mode de remise décrit l’intention du vendeur ; il ne déclenche aucune expédition.
+5. Pendant l’attente, inspecter les capacités disponibles et réutiliser ou préparer l’installation locale. Ne pas publier de fiche incomplète ni démarrer une nouvelle exposition publique avant d’avoir les réponses indispensables. Si l’agent ne peut pas exécuter de commandes, conserver des processus ou obtenir un tunnel, expliquer le blocage concret et l’intervention minimale nécessaire sans prétendre avoir publié.
+6. Une fois les informations réunies, créer l’article, exposer le vendeur et vérifier l’annonce publique selon les étapes ci-dessous. Rendre au propriétaire son identifiant, le lien du catalogue et celui de l’Agent Card, ainsi que les limites de disponibilité ou de notification observées.
+
 ## Installer ou réutiliser
 
 Réutiliser l’installation et son répertoire de données s’ils existent. Sinon, choisir un dossier persistant accessible dans l’environnement de l’utilisateur et installer dans un environnement virtuel Python 3.11+ :
 
 ```bash
 python3 -m venv .venv
-.venv/bin/python -m pip install "git+https://github.com/Math1987/a2a-seller-agent.git@codex/seller-library"
+.venv/bin/python -m pip install "git+https://github.com/Math1987/a2a-seller-agent.git"
 .venv/bin/a2a-seller --help
 ```
 
-Cette branche est la source de développement ; le paquet n’est pas encore publié sur PyPI. Enregistrer le commit réellement installé et les versions des dépendances. Pour reproduire une installation validée, réutiliser ce commit. Depuis un checkout de la version souhaitée, installer avec `.venv/bin/python -m pip install .`. Utiliser le Python et l’exécutable de cet environnement pour toutes les opérations et relances.
+Le paquet n’est pas encore publié sur PyPI. La commande ci-dessus utilise la branche par défaut. Si le propriétaire a fourni un lien vers une branche ou un commit précis, utiliser cette révision avec `@REVISION` dans l’URL Git, ou installer son checkout avec `.venv/bin/python -m pip install .`. Le skill et le code doivent provenir de la même révision. Enregistrer le commit réellement installé et les versions des dépendances ; pour reproduire une installation validée, réutiliser ce commit. Utiliser le Python et l’exécutable de cet environnement pour toutes les opérations et relances.
 
 Le skill est également disponible avec `a2a-seller skill show` après installation. Son activation dans le bot dépend de l’hôte.
 
@@ -35,7 +46,7 @@ Créer un article :
   --description "Description fournie par le propriétaire" \
   --condition "Défauts connus" --area "Lyon" \
   --handover "Remise en main propre, créneau à convenir" \
-  --request-id IDENTIFIANT_UNIQUE_DE_CETTE_CREATION
+  --real --request-id IDENTIFIANT_UNIQUE_DE_CETTE_CREATION
 ```
 
 - Réutiliser le même `--request-id` et les mêmes paramètres pour reprendre cette création après une coupure. Une nouvelle création reçoit un nouvel identifiant.

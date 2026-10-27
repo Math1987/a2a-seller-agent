@@ -2,25 +2,33 @@
 
 Une bibliothèque Python et un skill pour permettre à un agent personnel de gérer un catalogue d’occasion et de négocier via A2A 1.0. Le serveur et son stockage tournent dans l’environnement de l’utilisateur ; son agent expose le serveur avec le tunnel disponible sur cet environnement.
 
-Exemple de demande au bot :
+## Utiliser avec son agent
 
-> Installe a2a-seller-agent et ajoute ma table de nuit à 300 EUR, négociable jusqu’à 230 EUR minimum.
+Donner simplement le lien de ce dépôt à un agent capable de lire des liens et d’exécuter des commandes dans un environnement persistant :
+
+> Je veux vendre une tasse artisanale à 50 euros, prix minimum 30 euros. Utilise https://github.com/Math1987/a2a-seller-agent et mets-la en vente.
+
+**Pour l’agent qui reçoit une demande de vente : lire d’abord le [skill vendeur](skills/a2a-seller/SKILL.md), à la même révision que ce README, puis suivre ses instructions.** Le propriétaire n’a pas besoin de connaître le chemin du skill ni les commandes d’installation. Si le lien GitHub n’affiche pas le fichier complet, utiliser sa vue Raw ou lire le fichier dans un clone de cette révision.
+
+Le skill guide l’installation, la collecte des informations manquantes, la création de l’annonce réelle et son exposition A2A. Pour la tasse ci-dessus, l’agent connaît déjà le titre, la devise, le prix affiché et le plancher privé ; il demande seulement les informations utiles qui manquent, notamment l’état, la ville et les modalités de remise. Une demande de mise en vente réelle utilise `--real` ; elle n’exige pas une seconde confirmation de publication. Chaque accord de vente reste soumis à la confirmation du propriétaire.
+
+Cette entrée par le README ne constitue pas un mécanisme universel d’activation de skills. L’agent doit pouvoir suivre le lien et appliquer les instructions ; l’exécution persistante, le tunnel et les notifications dépendent de son environnement. Il signale précisément toute capacité manquante.
 
 Le bot traduit cette demande en commandes structurées. La bibliothèque valide les données, conserve le plancher privé et traite les échanges de façon déterministe. Elle n’appelle aucun modèle et n’interprète pas les montants par expressions régulières.
 
 ## Installation
 
-Python 3.11 ou supérieur (requis par les versions de Starlette utilisées). Le paquet n’est pas encore publié sur PyPI. Pour cette version de développement, installer la branche dédiée :
+Python 3.11 ou supérieur (requis par les versions de Starlette utilisées). Le paquet n’est pas encore publié sur PyPI. Installer depuis la branche par défaut du dépôt :
 
 ```bash
 python3 -m venv .venv
-.venv/bin/python -m pip install "git+https://github.com/Math1987/a2a-seller-agent.git@codex/seller-library"
+.venv/bin/python -m pip install "git+https://github.com/Math1987/a2a-seller-agent.git"
 .venv/bin/a2a-seller skill show
 ```
 
-Depuis un checkout de cette branche, remplacer l’installation distante par `.venv/bin/python -m pip install .`. Pour reproduire un déploiement, utiliser le commit testé plutôt qu’une branche mobile.
+Si le lien fourni désigne une branche ou un commit précis, installer cette révision en ajoutant `@REVISION` à l’URL Git, ou installer son checkout avec `.venv/bin/python -m pip install .`. Ne pas mélanger un skill de développement avec le code de la branche par défaut. Pour reproduire un déploiement, utiliser le commit testé plutôt qu’une branche mobile.
 
-Le [skill](skills/a2a-seller/SKILL.md) est aussi embarqué dans la distribution Python. L’installation du paquet ne l’active pas automatiquement dans le bot : lui faire lire le fichier ou la sortie de `a2a-seller skill show`, puis utiliser le mécanisme de skills de l’hôte.
+Le [skill](skills/a2a-seller/SKILL.md) est aussi embarqué dans la distribution Python. L’agent peut le retrouver avec `a2a-seller skill show` et, si son hôte le permet, l’enregistrer pour les prochaines demandes. L’installation Python seule n’active pas automatiquement un skill dans le bot.
 
 Les exemples suivants utilisent l’exécutable de cet environnement. Par défaut, les données restent dans `~/.local/share/a2a-seller`. `--data-dir CHEMIN` sélectionne un autre stockage et doit précéder la sous-commande.
 
@@ -33,7 +41,7 @@ Les exemples suivants utilisent l’exécutable de cet environnement. Par défau
   --condition "Rayure sur le plateau" \
   --price 300 --minimum-price 230 --currency EUR \
   --area "Lyon" --handover "Remise en main propre, créneau à convenir" \
-  --request-id table-de-nuit-creation-1
+  --real --request-id table-de-nuit-creation-1
 
 .venv/bin/a2a-seller item list
 .venv/bin/a2a-seller item show --id IDENTIFIANT_RETOURNE
