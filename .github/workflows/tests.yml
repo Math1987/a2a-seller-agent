@@ -1,0 +1,30 @@
+name: Tests and package
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: python -m pip install -e '.[dev]'
+      - run: python -m pytest -q
+      - run: python -m build
+      - name: Install wheel and find bundled skill outside checkout
+        shell: bash
+        run: |
+          python -m venv /tmp/a2a-wheel-test
+          /tmp/a2a-wheel-test/bin/python -m pip install dist/*.whl
+          cd /tmp
+          /tmp/a2a-wheel-test/bin/a2a-seller skill show
+          /tmp/a2a-wheel-test/bin/a2a-seller --data-dir /tmp/a2a-wheel-data item add --title Test --price 300 --minimum-price 230 --currency EUR
