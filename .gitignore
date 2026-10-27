@@ -10,3 +10,15 @@ public_base_url.txt
 *.bak*
 .venv/
 __pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.db
+*.db-shm
+*.db-wal
+.seller-data/
+.venv-*/
