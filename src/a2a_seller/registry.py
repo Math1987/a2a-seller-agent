@@ -24,7 +24,7 @@ from .storage import PUBLIC_FIELDS, encoded
 from .validation import SellerError, normalize_currency, text
 
 
-DEFAULT_REGISTRY_URL = "https://aithos.app"
+DEFAULT_REGISTRY_URL = "https://api.a2a-market.com"
 MAX_BODY_BYTES = 1024 * 1024
 MAX_RESPONSE_BYTES = 8 * 1024 * 1024
 MAX_ITEMS = 500

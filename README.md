@@ -93,7 +93,7 @@ La carte et les deux catalogues ont des rôles différents : le catalogue de dé
 
 Le helper `registry` utilise le contrat HTTP d’`a2a-market-registry`. Le registre est indépendant : d’autres agents peuvent l’utiliser avec leur propre client HTTP. Il conserve les annonces publiques et l’URL de la carte ; le serveur vendeur, le prix minimum et les décisions restent ici. Un acheteur recherche un objet dans cet index puis contacte directement son vendeur via A2A.
 
-Il faut une instance réellement disponible, son URL et un jeton de publication provisionné par son opérateur pour le bon `seller_id`. Le domaine `aithos.app` est la valeur prévue par défaut dans le helper ; cette valeur ne prouve pas qu’un service y est déployé. Les exemples utilisent une URL à remplacer. Aucun compte n’est créé et rien n’est publié tant que le registre n’est pas configuré.
+Il faut une instance réellement disponible, son URL et un jeton de publication provisionné par son opérateur pour le bon `seller_id`. L’URL de production retenue, également utilisée par défaut par le helper, est `https://api.a2a-market.com` ; son déploiement AWS est en préparation. La racine `https://a2a-market.com` est réservée à la page de présentation hébergée chez IONOS. Les exemples utilisent une URL à remplacer par celle du registre dont l’accès HTTPS a été vérifié. Aucun compte n’est créé et rien n’est publié tant que le registre n’est pas configuré. Une mise à jour du paquet ne change pas une URL déjà enregistrée : pour changer de registre, relancer `registry configure` avec son URL et le jeton correspondant, en conservant le répertoire de données du vendeur.
 
 Afficher l’identité publique locale à transmettre à l’opérateur, sans exporter les données d’administration :
 

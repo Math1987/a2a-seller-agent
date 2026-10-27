@@ -257,7 +257,7 @@ def test_search_is_public_validates_currency_and_never_creates_local_state(tmp_p
     registry = Registry(state, transport=httpx.MockTransport(search))
     assert registry.status() == {"configured": False}
     assert registry.search(query="vélo", currency="eur", max_asking_price_minor=20000)["items"] == []
-    assert requests[0].url.host == "aithos.app"
+    assert requests[0].url.host == "api.a2a-market.com"
     with pytest.raises(RegistryError):
         registry.search(max_asking_price_minor=20000)
     assert not state.exists()

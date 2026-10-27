@@ -97,7 +97,7 @@ Réutiliser une configuration existante. Sinon, obtenir l’URL effective du reg
 .venv/bin/a2a-seller registry identity
 ```
 
-Transmettre seulement le `seller_id` public à l’opérateur selon la demande du propriétaire. La commande crée l’identité locale si nécessaire, sans réseau. Ne pas exporter `item list` ni la base privée pour obtenir un accès au registre. Aucun parcours d’inscription publique n’est fourni. `aithos.app` est le domaine prévu par défaut, pas une preuve de déploiement ; sans URL joignable ou jeton, poursuivre la vente directe et signaler que l’indexation reste indisponible.
+Transmettre seulement le `seller_id` public à l’opérateur selon la demande du propriétaire. La commande crée l’identité locale si nécessaire, sans réseau. Ne pas exporter `item list` ni la base privée pour obtenir un accès au registre. Aucun parcours d’inscription publique n’est fourni. L’URL de production retenue et la valeur par défaut du helper sont `https://api.a2a-market.com`, avec un déploiement AWS en préparation ; vérifier sa disponibilité avant de la configurer explicitement avec `--url`. Cette valeur ne remplace pas une URL déjà enregistrée : pour un changement de registre demandé, relancer `registry configure` avec l’URL et le jeton correspondants sans changer de stockage vendeur. La racine `a2a-market.com` est réservée à la page de présentation IONOS. Sans URL joignable ou jeton, poursuivre la vente directe et signaler que l’indexation reste indisponible.
 
 Le jeton du registre est distinct des secrets ngrok et A2A. L’utiliser depuis un fichier privé `0600`, hors du chat et du dépôt :
 
