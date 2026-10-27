@@ -187,6 +187,24 @@ def test_withdrawal_removes_item_and_invalidates_pending(client, store, item):
     assert "error" in rejected
 
 
+def test_real_sale_is_visible_to_all_buyers_and_removes_catalogue_entry(client, store, item):
+    real_item = store.update_item(item["item_id"], simulation=False)
+    first, first_context = rpc(client, offer(real_item))
+    second, second_context = rpc(client, offer(real_item, 26000))
+    assert client.get("/catalog.json").json()["items"][0]["status"] == "available"
+    store.decide(first["proposal_id"], version=int(first["version"]), decision="confirm")
+    assert client.get("/catalog.json").json()["items"] == []
+    winner, _ = rpc(client, {"action": "proposal-status", "proposal_id": first["proposal_id"]}, context_id=first_context)
+    assert winner["status"] == "accepted"
+    assert winner["terms"] == first["terms"]
+    loser, _ = rpc(client, {"action": "proposal-status", "proposal_id": second["proposal_id"]}, context_id=second_context)
+    assert loser["status"] == "closed" and loser["closure_reason"] == "item_sold"
+    unavailable, _ = rpc(client, offer(real_item))
+    assert unavailable["error"]["code"] == "unavailable"
+    public_item, _ = rpc(client, {"action": "get-item", "item_id": item["item_id"]})
+    assert public_item["status"] == "sold"
+
+
 def test_proposal_isolation_between_contexts(client, item):
     result, _ = rpc(client, offer(item))
     foreign, _ = rpc(client, {"action": "proposal-status", "proposal_id": result["proposal_id"]})

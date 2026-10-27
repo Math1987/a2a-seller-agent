@@ -155,6 +155,8 @@ class SellerStore:
             if cached is not None:
                 return cached
             item = self._item(c, item_id)
+            if item["status"] == "sold":
+                raise SellerError("item_sold", "A sold item is terminal and cannot be modified.")
             if ("currency" in changes and normalize_currency(changes["currency"]) != item["currency"]
                     and not {"price_minor", "minimum_price_minor"}.issubset(changes)):
                 raise SellerError("invalid_update", "Changing currency requires both new prices; existing amounts are not converted.")
@@ -174,6 +176,8 @@ class SellerStore:
             if cached is not None:
                 return cached
             item = self._item(c, item_id)
+            if item["status"] == "sold":
+                raise SellerError("item_sold", "A sold item is terminal and cannot be withdrawn.")
             if item["status"] != "withdrawn":
                 item.update(status="withdrawn", revision=item["revision"] + 1, updated_at=now())
                 self._save_item(c, item)
@@ -208,11 +212,13 @@ class SellerStore:
                   (p["proposal_id"], p["version"], p["context_id"], p["item_id"], p["status"], encoded(p)))
 
     @classmethod
-    def _invalidate(cls, c, item_id, status):
+    def _invalidate(cls, c, item_id, status, *, closure_reason=None):
         rows = c.execute("SELECT data FROM proposals WHERE item_id=? AND status IN ('pending_seller','countered')", (item_id,)).fetchall()
         for row in rows:
             p = json.loads(row[0])
             p.update(status=status, updated_at=now())
+            if closure_reason is not None:
+                p["closure_reason"] = closure_reason
             cls._save_proposal(c, p)
 
     @staticmethod
@@ -321,6 +327,12 @@ class SellerStore:
             raise SellerError("invalid_decision", "Choose confirm, reject or counter.")
         with self._transaction() as c:
             p = self._latest(c, proposal_id)
+            # A lost response to an explicit confirmation must be safe to retry.
+            # This returns the already recorded decision, without reopening the
+            # article or reapplying any side effects.
+            if (decision == "confirm" and p["version"] == version
+                    and p["status"] in {"accepted", "accepted_fictive"}):
+                return p
             if p["version"] != version or p["status"] != "pending_seller":
                 raise SellerError("stale_proposal", "Only the latest pending proposal may be decided.")
             item = self._item(c, p["item_id"])
@@ -338,4 +350,12 @@ class SellerStore:
                 p.update(status=("accepted_fictive" if item["simulation"] else "accepted")
                          if decision == "confirm" else "rejected", updated_at=now())
             self._save_proposal(c, p)
+            if decision == "confirm" and not item["simulation"]:
+                # BEGIN IMMEDIATE serializes competing decisions. Save the winner
+                # before closing outstanding proposals so its terms and result
+                # remain readable through proposal-status. No registry/network
+                # work belongs inside this local sale transaction.
+                item.update(status="sold", revision=item["revision"] + 1, updated_at=now())
+                self._save_item(c, item)
+                self._invalidate(c, item["item_id"], "closed", closure_reason="item_sold")
             return p

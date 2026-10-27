@@ -167,3 +167,84 @@ def test_python_module_entrypoint(tmp_path):
                              "item", "list"], cwd=tmp_path, env=env, text=True, capture_output=True)
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout) == []
+
+
+def test_registry_identity_bootstraps_only_local_seller_and_is_stable(command):
+    identity = command("registry", "identity")
+    assert set(identity) == {"seller_id"}
+    assert identity["seller_id"].startswith("seller_")
+    assert command("registry", "identity") == identity
+    assert not (command.data_dir / "registry.db").exists()
+
+
+def test_registry_status_and_search_do_not_create_seller(tmp_path, monkeypatch, capsys):
+    import httpx
+    import a2a_seller.registry as module
+    original = module.Registry
+    requests = []
+    def search(request):
+        requests.append(request)
+        assert "Authorization" not in request.headers
+        assert request.url.params["q"] == "vélo"
+        return httpx.Response(200, json={"schema_version": "0.1", "items": [], "next_cursor": None})
+    monkeypatch.setattr(module, "Registry", lambda path: original(path, transport=httpx.MockTransport(search)))
+    state = tmp_path / "not-created"
+    prefix = ["--data-dir", str(state), "registry"]
+    assert main([*prefix, "status"]) == 0
+    assert json.loads(capsys.readouterr().out) == {"configured": False}
+    assert main([*prefix, "search", "--url", "https://registry.example", "--query", "vélo",
+                 "--currency", "EUR", "--max-asking-price-minor", "20000"]) == 0
+    assert json.loads(capsys.readouterr().out)["items"] == []
+    assert len(requests) == 1
+    assert not state.exists()
+
+
+def test_cli_registry_configure_is_local_and_mutations_publish_or_warn(tmp_path, monkeypatch, capsys):
+    import httpx
+    import a2a_seller.registry as module
+    original = module.Registry
+    requests = []
+    offline = False
+    def publish(request):
+        requests.append(request)
+        if offline:
+            raise httpx.ConnectError("must-not-echo-secret", request=request)
+        body = json.loads(request.content)
+        return httpx.Response(200, json={"seller_id": body["seller_id"], "sync_revision": body["sync_revision"],
+            "item_count": len(body["items"]), "last_synced_at": "2026-10-27T12:00:00Z", "expires_at": "2026-10-27T12:15:00Z"})
+    monkeypatch.setattr(module, "Registry", lambda path: original(path, transport=httpx.MockTransport(publish)))
+    token = tmp_path / "token"
+    token.write_text("publication-secret")
+    token.chmod(0o600)
+    prefix = ["--data-dir", str(tmp_path / "state")]
+    assert main([*prefix, "registry", "configure", "--url", "https://registry.example",
+                 "--agent-card-url", "https://seller.example/card", "--token-file", str(token)]) == 0
+    configured = json.loads(capsys.readouterr().out)
+    assert configured["pending"]
+    assert requests == []
+    assert main([*prefix, "item", "add", "--title", "Lampe", "--price", "30",
+                 "--minimum-price", "20", "--currency", "EUR", "--real"]) == 0
+    result = capsys.readouterr()
+    added = json.loads(result.out)
+    assert result.err == ""
+    assert json.loads(requests[-1].content)["items"][0]["item_id"] == added["item_id"]
+    offline = True
+    assert main([*prefix, "item", "withdraw", "--id", added["item_id"]]) == 0
+    result = capsys.readouterr()
+    assert json.loads(result.out)["status"] == "withdrawn"
+    assert json.loads(result.err)["warning"]["code"] == "registry_unavailable"
+    assert "must-not-echo-secret" not in result.err
+    assert main([*prefix, "registry", "status"]) == 0
+    assert json.loads(capsys.readouterr().out)["pending"]
+    offline = False
+    assert main([*prefix, "registry", "sync"]) == 0
+    assert not json.loads(capsys.readouterr().out)["pending"]
+    assert json.loads(requests[-1].content)["items"] == []
+
+
+def test_confirm_cli_attempts_registry_sync(command, monkeypatch):
+    _, _, proposal = make_offer(command)
+    calls = []
+    monkeypatch.setattr("a2a_seller.cli._sync_after_mutation", lambda store: calls.append(store.data_dir))
+    command("proposal", "confirm", "--id", proposal["proposal_id"], "--version", str(proposal["version"]))
+    assert calls == [command.data_dir.resolve()]

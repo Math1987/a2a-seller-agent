@@ -82,6 +82,24 @@ def parser():
     serve.add_argument("--token-file", type=Path,
                        help="Owner-only file containing the A2A bearer token (not the ngrok authtoken)")
 
+    registry = groups.add_parser("registry", help="Optional public discovery registry").add_subparsers(dest="command", required=True)
+    registry.add_parser("identity", help="Show the local seller ID for publication-token provisioning; no network")
+    configure = registry.add_parser("configure", help="Save explicit publication configuration; does not send a request")
+    configure.add_argument("--url", default="https://aithos.app")
+    configure.add_argument("--agent-card-url", required=True)
+    configure.add_argument("--token-file", type=Path, required=True,
+                           help="Owner-only file containing a separate registry publication token")
+    registry.add_parser("sync")
+    registry.add_parser("status")
+    search = registry.add_parser("search", help="Search without a seller account or publication token")
+    search.add_argument("--url", help="Registry override; otherwise configured registry or https://aithos.app")
+    search.add_argument("--query")
+    search.add_argument("--area")
+    search.add_argument("--currency")
+    search.add_argument("--max-asking-price-minor", type=int)
+    search.add_argument("--limit", type=int, default=20)
+    search.add_argument("--cursor")
+
     groups.add_parser("skill").add_subparsers(dest="command", required=True).add_parser("show")
     return root
 
@@ -141,9 +159,28 @@ def run(args):
         # Intentional text output: this command is the instruction document itself.
         print(_skill_text(), end="")
         return
+    if args.group == "registry":
+        from .registry import Registry
+        registry = Registry(args.data_dir)
+        if args.command == "status":
+            _emit(registry.status())
+            return
+        if args.command == "search":
+            _emit(registry.search(url=args.url, query=args.query, area=args.area, currency=args.currency,
+                                 max_asking_price_minor=args.max_asking_price_minor,
+                                 limit=args.limit, cursor=args.cursor))
+            return
     from .storage import SellerStore
     store = SellerStore(args.data_dir.expanduser())
-    if args.group == "item":
+    if args.group == "registry":
+        if args.command == "identity":
+            result = {"seller_id": store.catalog()["seller_id"]}
+        elif args.command == "configure":
+            result = registry.configure(store, url=args.url, agent_card_url=args.agent_card_url,
+                                        token_file=args.token_file)
+        else:
+            result = registry.sync(store)
+    elif args.group == "item":
         if args.command == "add":
             result = store.add_item(**_item_values(args, store))
         elif args.command == "update":
@@ -176,9 +213,29 @@ def run(args):
         from .server import create_app
         import uvicorn
         app = create_app(store, public_url=args.public_url, token=_token(args.token_file))
+        from .registry import attach_registry_lifespan
+        attach_registry_lifespan(app, store, args.public_url)
         uvicorn.run(app, host="127.0.0.1", port=args.port)
         return
     _emit(result)
+    if ((args.group == "item" and args.command in {"add", "update", "withdraw"})
+            or (args.group == "proposal" and args.command == "confirm")):
+        _sync_after_mutation(store)
+
+
+def _sync_after_mutation(store):
+    """A registry outage must not turn a committed owner mutation into a failure."""
+    import sqlite3
+    from .registry import Registry, RegistryError
+    registry = Registry(store.data_dir)
+    try:
+        if registry.configured:
+            registry.sync(store)
+    except (RegistryError, OSError, sqlite3.Error) as exc:
+        _emit({"warning": {
+            "code": getattr(exc, "code", "registry_local_state_error"),
+            "message": "The local change succeeded. Registry publication is pending; inspect registry status and retry registry sync.",
+        }}, error=True)
 
 
 def main(argv=None):
