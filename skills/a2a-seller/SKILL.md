@@ -1,6 +1,6 @@
 ---
 name: a2a-seller
-description: Installer et utiliser a2a-seller-agent pour publier plusieurs objets d’occasion, modifier ou retirer des annonces et traiter les propositions A2A selon les instructions privées du vendeur, depuis l’environnement de son agent personnel.
+description: Installer et utiliser a2a-seller-agent pour publier des objets d’occasion, les indexer dans un registre configuré, modifier ou retirer des annonces et traiter les propositions A2A selon le mandat privé du vendeur depuis son environnement.
 ---
 
 # Vendeur d’occasion A2A
@@ -16,7 +16,7 @@ Une demande telle que « Je veux vendre une tasse artisanale à 50 euros, prix m
 3. Avant de publier, demander les informations manquantes qui rendent l’annonce exploitable : l’état et les défauts connus, la ville ou zone publique et les modalités de remise ou de livraison souhaitées. Grouper ces questions dans un seul message selon les possibilités de l’hôte. Ne pas demander une adresse exacte pour le catalogue. Une réponse « état inconnu » peut être conservée telle quelle ; ne pas transformer une inconnue en promesse.
 4. Demander également tout prix manquant ou devise ambiguë. Les photos, dimensions, marque et autres détails sont facultatifs, sauf s’ils sont nécessaires pour identifier l’objet ou si le propriétaire les demande. Ne pas inventer de matière, de dimensions, de frais de livraison ni de propriétés telles que la compatibilité alimentaire d’une tasse. Le mode de remise décrit l’intention du vendeur ; il ne déclenche aucune expédition.
 5. Pendant l’attente, inspecter les capacités disponibles et réutiliser ou préparer l’installation locale. Ne pas publier de fiche incomplète ni démarrer une nouvelle exposition publique avant d’avoir les réponses indispensables. Si l’agent ne peut pas exécuter de commandes, conserver des processus ou obtenir un tunnel, expliquer le blocage concret et l’intervention minimale nécessaire sans prétendre avoir publié.
-6. Une fois les informations réunies, créer l’article, exposer le vendeur et vérifier l’annonce publique selon les étapes ci-dessous. Rendre au propriétaire son identifiant, le lien du catalogue et celui de l’Agent Card, ainsi que les limites de disponibilité ou de notification observées.
+6. Une fois les informations réunies, créer l’article, exposer le vendeur et vérifier l’annonce publique selon les étapes ci-dessous. Configurer l’indexation si un registre disponible et le jeton correspondant à ce vendeur sont fournis. Rendre au propriétaire son identifiant, le lien du catalogue et celui de l’Agent Card, l’état réel de l’indexation et les limites de disponibilité ou de notification observées.
 
 ## Installer ou réutiliser
 
@@ -64,7 +64,7 @@ Lister et cibler les objets avant modification :
 .venv/bin/a2a-seller item withdraw --id IDENTIFIANT
 ```
 
-Si plusieurs objets correspondent à « ma lampe », demander lequel. Une modification invalide les propositions encore en attente ; un retrait enlève l’objet des disponibilités et invalide ses propositions en attente, en conservant l’historique. Vérifier le résultat enregistré avant d’annoncer le succès.
+Si plusieurs objets correspondent à « ma lampe », demander lequel. Une modification invalide les propositions encore en attente ; un retrait enlève l’objet des disponibilités et invalide ses propositions en attente, en conservant l’historique. Un objet `sold` ne peut plus être modifié ou retiré. Vérifier le résultat enregistré avant d’annoncer le succès.
 
 ## Exposer depuis l’environnement du vendeur
 
@@ -86,6 +86,46 @@ Ces commandes tournent dans des processus distincts. Réutiliser le tunnel déj�
 Si un contrôle d’accès est souhaité, utiliser `serve --token-file CHEMIN_PRIVE`. Le fichier doit être réservé au propriétaire (mode 0600 sous POSIX). Le jeton protège A2A et le catalogue d’articles ; carte et santé restent découvrables. Le garder hors du chat et des données publiques. Sans jeton, tout client joignant le tunnel peut appeler le service ; un jeton commun aux testeurs ne crée pas des identités distinctes.
 
 Conserver les processus avec le mécanisme disponible sur l’hôte. Toute surveillance doit cibler uniquement leurs identifiants, respecter l’arrêt volontaire et borner les relances. Ne jamais tuer tous les processus ngrok de la machine. Après changement d’URL, redémarrer le serveur avec la nouvelle valeur et revérifier l’accès. Le paquet ne fournit pas de watchdog ni de tunnel intégré.
+
+## Indexer dans un registre disponible
+
+Le registre est un index HTTP séparé ; il ne reçoit ni plancher, ni mandat, ni historique de négociation. Les agents acheteurs y trouvent les annonces puis contactent le vendeur directement en A2A. Un catalogue exposé sur le tunnel ne devient pas automatiquement trouvable dans cet index.
+
+Réutiliser une configuration existante. Sinon, obtenir l’URL effective du registre et un jeton de publication délivré par son opérateur pour l’identité publique locale :
+
+```bash
+.venv/bin/a2a-seller registry identity
+```
+
+Transmettre seulement le `seller_id` public à l’opérateur selon la demande du propriétaire. La commande crée l’identité locale si nécessaire, sans réseau. Ne pas exporter `item list` ni la base privée pour obtenir un accès au registre. Le registre de production est en ligne à `https://api.a2a-market.com`, également la valeur par défaut du helper. La recherche est publique, mais la publication pilote requiert un jeton délivré par l’opérateur ; aucun parcours d’inscription automatique n’est fourni.
+
+Cette valeur ne remplace pas une URL déjà enregistrée : pour un changement de registre demandé, relancer `registry configure` avec l’URL et le jeton correspondants sans changer de stockage vendeur. La racine `a2a-market.com` est réservée à une future page de présentation. L’indexation reste facultative : sans accès réseau au registre ou sans jeton, poursuivre la vente directe et signaler que l’indexation reste indisponible.
+
+Le jeton du registre est distinct des secrets ngrok et A2A. L’utiliser depuis un fichier privé `0600`, hors du chat et du dépôt :
+
+```bash
+.venv/bin/a2a-seller registry configure \
+  --url https://api.a2a-market.com \
+  --agent-card-url https://ENDPOINT_REEL/.well-known/agent-card.json \
+  --token-file CHEMIN_PRIVE_REGISTRY_TOKEN
+.venv/bin/a2a-seller registry sync
+.venv/bin/a2a-seller registry status
+```
+
+`configure` ne publie rien. `sync` n’envoie que les annonces réelles disponibles ; ne pas transformer un objet fictif en vente réelle pour tester l’index. Un jeton d’accès A2A ne masque pas une annonce indexée ; le client acheteur devra disposer de cet accès pour négocier.
+
+Après configuration, les ajouts, modifications, retraits et confirmations déclenchent une tentative de synchronisation. `serve` démarre un envoi puis renouvelle toutes les 300 secondes, tant que son processus fonctionne. Redémarrer `serve` après une nouvelle configuration s’il tournait déjà, ainsi qu’après changement d’URL du tunnel : il dérive la carte de son `--public-url`. Le registre expire les annonces après 900 secondes sans renouvellement par défaut.
+
+Une erreur réseau ne supprime pas une modification locale réussie : lire l’avertissement, vérifier `registry status` puis rejouer `registry sync` après correction. Ne pas répéter une création avec un nouvel identifiant pour réparer une indexation. Vérifier la recherche avant d’annoncer que l’annonce est indexée ou retirée. En cas d’échec, préciser qu’une ancienne annonce peut subsister jusqu’à son expiration et que le vendeur fait autorité sur sa disponibilité.
+
+Pour chercher, aucun jeton de publication n’est requis :
+
+```bash
+.venv/bin/a2a-seller registry search --url https://api.a2a-market.com \
+  --query "tasse artisanale" --area "Lyon" --currency EUR --limit 20
+```
+
+`--max-asking-price-minor` filtre le prix affiché en unités mineures et exige `--currency`. Éviter ce filtre si le budget pourrait être atteint en négociant un prix affiché supérieur : le registre ignore le plancher. Suivre `next_cursor` avec `--cursor` et les mêmes filtres pour les pages suivantes. Appliquer la politique réseau de l’hôte aux URLs tierces renvoyées avant de les ouvrir. Le registre ne vérifie ni leur disponibilité ni l’identité déclarée ; consulter la carte et la fiche courante auprès du vendeur avant toute offre.
 
 ## Catalogue et négociation
 
@@ -143,10 +183,12 @@ Une réponse ambiguë du propriétaire exige une clarification. Exécuter unique
 .venv/bin/a2a-seller proposal counter --id PROPOSITION --version VERSION --price 270
 ```
 
-Ces commandes sont des alternatives. La contre-proposition doit être suivie d’une offre explicite de l’acheteur. Celui-ci peut lire le résultat avec `{"action":"proposal-status","proposal_id":"PROPOSITION"}` dans le même contexte A2A. Une confirmation ne constitue ni paiement, ni réservation physique, ni livraison ; en simulation, elle reste fictive.
+Ces commandes sont des alternatives. Plusieurs offres peuvent être en attente : faire décider le propriétaire sur la proposition et la version exactes. Une confirmation réelle marque atomiquement l’article `sold`, accepte l’offre choisie et clôt les autres propositions ouvertes. L’article quitte les disponibilités locales et une synchronisation du registre est tentée s’il est configuré. La simulation produit une confirmation fictive sans marquer l’article vendu.
+
+La contre-proposition doit être suivie d’une offre explicite de l’acheteur. Celui-ci peut lire le résultat avec `{"action":"proposal-status","proposal_id":"PROPOSITION"}` dans le même contexte A2A. Une confirmation ne constitue ni paiement, ni réservation physique, ni livraison.
 
 ## Vérifier le résultat
 
 Tester dans un répertoire de données séparé : deux articles distincts, lecture du catalogue, offre structurée, décision locale, lecture du statut et retrait d’un article. Ne pas créer d’annonces fictives dans un catalogue réel sans le demander. Vérifier que les reprises ne dupliquent pas les créations et que les mandats privés ne sortent pas.
 
-Rapporter les identifiants des articles, les URLs, les commandes de gestion et d’arrêt, le mécanisme réel de notification et les limites observées. Distinguer ce qui a été testé localement de ce qui a été vérifié via le tunnel. Le succès des commandes ne prouve pas à lui seul que Grok recevra une notification.
+Rapporter les identifiants des articles, les URLs, les commandes de gestion et d’arrêt, l’état de synchronisation du registre, le mécanisme réel de notification et les limites observées. Distinguer ce qui a été testé localement, via le tunnel et dans l’index. Le succès des commandes ne prouve pas à lui seul que Grok recevra une notification.

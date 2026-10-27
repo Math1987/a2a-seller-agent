@@ -1,5 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor
 import json
+from threading import Barrier
 from uuid import uuid4
 
 import pytest
@@ -217,3 +218,152 @@ def test_simultaneous_seller_decisions_have_single_winner(store):
         results = list(pool.map(decide, ["confirm", "reject"]))
     assert results.count("stale_proposal") == 1
     assert status(store, p)["status"] in {"accepted_fictive", "rejected"}
+
+
+def test_real_item_stays_available_until_explicit_owner_confirmation(store):
+    item = add(store, simulation=False)
+    first = offer(store, item, context="buyer-a")
+    second = offer(store, item, context="buyer-b")
+    assert len(store.list_proposals(pending_only=True)) == 2
+    store.decide(second["proposal_id"], version=second["version"], decision="counter", price_minor=28000)
+    store.decide(first["proposal_id"], version=first["version"], decision="reject")
+    assert store.get_item(item["item_id"])["status"] == "available"
+    assert [i["item_id"] for i in store.catalog()["items"]] == [item["item_id"]]
+
+
+def test_real_confirmation_sells_item_and_closes_all_other_open_proposals(store):
+    item = add(store, simulation=False)
+    other_item = add(store, title="Lampe", simulation=False)
+    winner = offer(store, item, 26000, context="buyer-a")
+    pending = offer(store, item, 27000, context="buyer-b")
+    countered = offer(store, item, 25000, context="buyer-c")
+    countered = store.decide(countered["proposal_id"], version=countered["version"],
+                            decision="counter", price_minor=28000)
+    unaffected = offer(store, other_item, context="buyer-d")
+
+    decision = store.decide(winner["proposal_id"], version=winner["version"], decision="confirm")
+    assert decision["status"] == "accepted"
+    assert decision["terms"] == winner["terms"]
+    sold = store.get_item(item["item_id"])
+    assert sold["status"] == "sold" and sold["revision"] == item["revision"] + 1
+    assert [i["item_id"] for i in store.catalog()["items"]] == [other_item["item_id"]]
+    assert len(store.list_items()) == 1
+    assert len(store.list_items(include_withdrawn=True)) == 2
+    for proposal, context in ((pending, "buyer-b"), (countered, "buyer-c")):
+        result = status(store, proposal, context)
+        assert result["status"] == "closed"
+        assert result["closure_reason"] == "item_sold"
+        with pytest.raises(SellerError) as error:
+            store.decide(proposal["proposal_id"], version=proposal["version"], decision="confirm")
+        assert error.value.code == "stale_proposal"
+    assert status(store, winner, "buyer-a")["status"] == "accepted"
+    assert status(store, winner, "buyer-a")["terms"] == winner["terms"]
+    assert status(store, unaffected, "buyer-d")["status"] == "pending_seller"
+    assert [p["proposal_id"] for p in store.pending_notifications()] == [unaffected["proposal_id"]]
+    with pytest.raises(SellerError) as error:
+        offer(store, item, context="buyer-new")
+    assert error.value.code == "unavailable"
+
+
+def test_sold_item_is_terminal_and_confirmation_retry_survives_restart(store):
+    item = add(store, simulation=False)
+    proposal = offer(store, item)
+    confirmed = store.decide(proposal["proposal_id"], version=proposal["version"], decision="confirm")
+    sold = store.get_item(item["item_id"], private=True)
+    restarted = SellerStore(store.data_dir)
+    assert restarted.decide(proposal["proposal_id"], version=proposal["version"], decision="confirm") == confirmed
+    assert restarted.get_item(item["item_id"], private=True) == sold
+    assert restarted.catalog()["items"] == []
+    for mutation in (
+        lambda: restarted.update_item(item["item_id"], price_minor=29000),
+        lambda: restarted.update_item(item["item_id"], simulation=True),
+        lambda: restarted.withdraw_item(item["item_id"]),
+    ):
+        with pytest.raises(SellerError) as error:
+            mutation()
+        assert error.value.code == "item_sold"
+    assert restarted.get_item(item["item_id"], private=True) == sold
+    assert status(restarted, proposal)["terms"] == proposal["terms"]
+
+
+def test_two_buyers_concurrent_confirmations_have_one_sale(store):
+    item = add(store, simulation=False)
+    proposals = [offer(store, item, context=f"buyer-{i}") for i in range(2)]
+    stores = [SellerStore(store.data_dir), SellerStore(store.data_dir)]
+    ready = Barrier(2)
+
+    def confirm(index):
+        p = proposals[index]
+        ready.wait(timeout=10)
+        try:
+            return stores[index].decide(p["proposal_id"], version=p["version"], decision="confirm")["status"]
+        except SellerError as error:
+            return error.code
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        outcomes = list(pool.map(confirm, range(2)))
+    assert sorted(outcomes) == ["accepted", "stale_proposal"]
+    final = [status(store, p, f"buyer-{i}")["status"] for i, p in enumerate(proposals)]
+    assert sorted(final) == ["accepted", "closed"]
+    assert store.get_item(item["item_id"])["revision"] == item["revision"] + 1
+    assert store.catalog()["items"] == []
+
+
+def test_simultaneous_retries_of_winning_confirmation_are_idempotent(store):
+    item = add(store, simulation=False)
+    p = offer(store, item)
+    ready = Barrier(2)
+
+    def confirm(_):
+        ready.wait(timeout=10)
+        return store.decide(p["proposal_id"], version=p["version"], decision="confirm")
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        outcomes = list(pool.map(confirm, range(2)))
+    assert outcomes[0] == outcomes[1]
+    assert outcomes[0]["status"] == "accepted"
+    assert store.get_item(item["item_id"])["revision"] == item["revision"] + 1
+
+
+def test_sale_transaction_rolls_back_entire_decision_on_failure(store, monkeypatch):
+    item = add(store, simulation=False)
+    winner = offer(store, item)
+    competitor = offer(store, item, context="buyer-b")
+
+    def fail_closure(*args, **kwargs):
+        raise RuntimeError("Simulated local write failure")
+
+    monkeypatch.setattr(store, "_invalidate", fail_closure)
+    with pytest.raises(RuntimeError):
+        store.decide(winner["proposal_id"], version=winner["version"], decision="confirm")
+    assert store.get_item(item["item_id"])["status"] == "available"
+    assert status(store, winner)["status"] == "pending_seller"
+    assert status(store, competitor, "buyer-b")["status"] == "pending_seller"
+    assert len(store.catalog()["items"]) == 1
+
+
+def test_simulation_confirmation_never_consumes_article_or_other_offers(store):
+    item = add(store, simulation=True)
+    first = offer(store, item)
+    second = offer(store, item, context="buyer-b")
+    confirmed = store.decide(first["proposal_id"], version=first["version"], decision="confirm")
+    assert confirmed["status"] == "accepted_fictive"
+    assert store.decide(first["proposal_id"], version=first["version"], decision="confirm") == confirmed
+    assert store.get_item(item["item_id"])["status"] == "available"
+    assert status(store, second, "buyer-b")["status"] == "pending_seller"
+    assert offer(store, item, context="buyer-c")["status"] == "pending_seller"
+    assert len(store.catalog()["items"]) == 1
+
+
+def test_fictive_confirmation_cannot_be_replayed_as_a_real_sale(store):
+    item = add(store, simulation=True)
+    simulated = offer(store, item)
+    fictive = store.decide(simulated["proposal_id"], version=simulated["version"], decision="confirm")
+    real_item = store.update_item(item["item_id"], simulation=False)
+    real_proposal = offer(store, real_item, context="real-buyer")
+    assert store.decide(simulated["proposal_id"], version=simulated["version"], decision="confirm") == fictive
+    assert store.get_item(item["item_id"])["status"] == "available"
+    assert status(store, real_proposal, "real-buyer")["status"] == "pending_seller"
+    assert store.decide(real_proposal["proposal_id"], version=real_proposal["version"], decision="confirm")["status"] == "accepted"
+    assert store.get_item(item["item_id"])["status"] == "sold"
+    assert status(store, simulated)["status"] == "accepted_fictive"

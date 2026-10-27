@@ -10,7 +10,7 @@ Donner simplement le lien de ce dépôt à un agent capable de lire des liens et
 
 **Pour l’agent qui reçoit une demande de vente : lire d’abord le [skill vendeur](skills/a2a-seller/SKILL.md), à la même révision que ce README, puis suivre ses instructions.** Le propriétaire n’a pas besoin de connaître le chemin du skill ni les commandes d’installation. Si le lien GitHub n’affiche pas le fichier complet, utiliser sa vue Raw ou lire le fichier dans un clone de cette révision.
 
-Le skill guide l’installation, la collecte des informations manquantes, la création de l’annonce réelle et son exposition A2A. Pour la tasse ci-dessus, l’agent connaît déjà le titre, la devise, le prix affiché et le plancher privé ; il demande seulement les informations utiles qui manquent, notamment l’état, la ville et les modalités de remise. Une demande de mise en vente réelle utilise `--real` ; elle n’exige pas une seconde confirmation de publication. Chaque accord de vente reste soumis à la confirmation du propriétaire.
+Le skill guide l’installation, la collecte des informations manquantes, la création de l’annonce réelle et son exposition A2A. Il peut aussi synchroniser les annonces publiques vers un registre de recherche configuré avec un jeton vendeur. Pour la tasse ci-dessus, l’agent connaît déjà le titre, la devise, le prix affiché et le plancher privé ; il demande seulement les informations utiles qui manquent, notamment l’état, la ville et les modalités de remise. Une demande de mise en vente réelle utilise `--real` ; elle n’exige pas une seconde confirmation de publication. Chaque accord de vente reste soumis à la confirmation du propriétaire.
 
 Cette entrée par le README ne constitue pas un mécanisme universel d’activation de skills. L’agent doit pouvoir suivre le lien et appliquer les instructions ; l’exécution persistante, le tunnel et les notifications dépendent de son environnement. Il signale précisément toute capacité manquante.
 
@@ -53,7 +53,7 @@ Les commandes renvoient du JSON ; une erreur produit du JSON sur stderr et un co
 
 Une création est **en simulation par défaut**. Ajouter `--real` seulement pour une annonce réelle demandée par le propriétaire. Même dans ce mode, la bibliothèque ne débite aucun paiement, ne réserve pas physiquement l’objet et n’organise pas de livraison.
 
-Chaque article reçoit un identifiant stable et une révision. Une modification invalide les propositions encore en attente ; un retrait retire l’article du catalogue disponible et invalide ses propositions en attente. L’historique reste conservé. Réutiliser le même `--request-id` avec les mêmes paramètres après une coupure évite de créer deux fois l’article ; un nouvel acte utilise un nouvel identifiant de requête.
+Chaque article reçoit un identifiant stable et une révision. Une modification invalide les propositions encore en attente ; un retrait retire l’article du catalogue disponible et invalide ses propositions en attente. L’historique reste conservé. Un article déjà vendu est terminal : il ne peut plus être modifié ou retiré. Réutiliser le même `--request-id` avec les mêmes paramètres après une coupure évite de créer deux fois l’article ; un nouvel acte utilise un nouvel identifiant de requête.
 
 Les montants CLI sont décimaux exacts, sans arrondi implicite. Les devises prises en charge sont EUR, USD, GBP, CHF, CAD, AUD, NZD (deux décimales) et JPY (aucune décimale). Utiliser un code explicite : `$` n’identifie pas une devise. Dans les données et messages A2A, les montants sont des entiers en unités mineures : `25000` représente 250,00 EUR. Le prix minimal doit être positif et inférieur ou égal au prix affiché. Modifier la devise exige de fournir à nouveau les deux prix.
 
@@ -88,6 +88,47 @@ Routes :
 | `/healthz` | État du serveur. |
 
 La carte et les deux catalogues ont des rôles différents : le catalogue de découverte trouve l’agent ; le catalogue d’articles trouve ses objets. Ajouter un article ne crée pas une nouvelle carte ni un nouveau tunnel.
+
+## Rendre les annonces trouvables dans un registre
+
+Le helper `registry` utilise le contrat HTTP d’`a2a-market-registry`. Le registre est indépendant : d’autres agents peuvent l’utiliser avec leur propre client HTTP. Il conserve les annonces publiques et l’URL de la carte ; le serveur vendeur, le prix minimum et les décisions restent ici. Un acheteur recherche un objet dans cet index puis contacte directement son vendeur via A2A.
+
+Le registre de production est en ligne à [https://api.a2a-market.com](https://api.a2a-market.com), l’URL utilisée par défaut par le helper. La recherche est publique ; la publication pilote exige un jeton provisionné par l’opérateur pour le bon `seller_id`. Il n’existe pas d’inscription automatique. La racine `https://a2a-market.com` est réservée à une future page de présentation.
+
+L’indexation reste facultative : rien n’est publié tant que le registre n’est pas configuré. Une mise à jour du paquet ne change pas une URL déjà enregistrée : pour changer de registre, relancer `registry configure` avec son URL et le jeton correspondant, en conservant le répertoire de données du vendeur. Les exemples suivants utilisent le service de production ; remplacer l’URL de la carte par celle du vendeur et le chemin du jeton par son fichier privé.
+
+Afficher l’identité publique locale à transmettre à l’opérateur, sans exporter les données d’administration :
+
+```bash
+.venv/bin/a2a-seller registry identity
+```
+
+Cette commande crée l’identité locale si nécessaire, sans requête réseau. Conserver le même répertoire de données ; un nouveau stockage crée un autre vendeur. Après réception du jeton dans un fichier privé `0600` :
+
+```bash
+.venv/bin/a2a-seller registry configure \
+  --url https://api.a2a-market.com \
+  --agent-card-url https://VOTRE-ENDPOINT.ngrok-free.app/.well-known/agent-card.json \
+  --token-file /chemin/prive/registry-token
+.venv/bin/a2a-seller registry sync
+.venv/bin/a2a-seller registry status
+```
+
+Le jeton du registre est distinct de l’authtoken ngrok et d’un éventuel jeton d’accès A2A. Ne pas le copier dans le chat, la carte ou une annonce. `configure` enregistre la configuration sans publier ; `sync` publie uniquement les articles `available` et `simulation: false`. Les annonces fictives restent utilisables pour les tests A2A locaux et n’entrent pas dans cet index public. Un contrôle d’accès A2A ne masque pas les champs publics volontairement publiés au registre ; l’acheteur aura encore besoin de l’accès approprié pour négocier avec un vendeur protégé.
+
+Une fois configuré, le helper tente une synchronisation après les ajouts, modifications, retraits et confirmations de vente. `serve` lance un premier envoi puis un renouvellement toutes les 300 secondes pendant sa vie. Si la configuration est ajoutée alors que `serve` tourne déjà, redémarrer ce processus pour activer le renouvellement. À chaque démarrage, `serve` reprend l’URL de carte dérivée de son `--public-url`, notamment après changement d’URL ngrok.
+
+Le registre expire les publications après 900 secondes sans renouvellement avec son réglage par défaut. Une erreur de synchronisation conserve l’opération locale réussie et produit un avertissement ; vérifier `registry status`, corriger la connexion et relancer `registry sync`. Ne pas recréer l’article pour compenser cette erreur. Une annonce retirée peut rester visible dans l’index jusqu’à sa prochaine synchronisation ou son expiration. La disponibilité et la révision définitives se vérifient toujours auprès du vendeur.
+
+Rechercher sans jeton de publication, avec ou sans installation d’un vendeur local :
+
+```bash
+.venv/bin/a2a-seller registry search --url https://api.a2a-market.com \
+  --query "tasse artisanale" --area "Lyon" --currency EUR \
+  --max-asking-price-minor 6000 --limit 20
+```
+
+Le prix maximal filtre le **prix affiché**, en unités mineures, et exige une devise. Un objet affiché plus cher mais négociable peut donc être exclu : le registre ne connaît pas son plancher. Les résultats contiennent `seller_id`, `item_id`, `agent_card_url` et `next_cursor` pour la pagination. Le client renvoie ce curseur avec les mêmes filtres. `search` n’envoie jamais le jeton de publication et ne crée pas de base vendeur. Avant d’ouvrir une URL reçue, l’agent applique sa propre politique d’accès réseau aux liens de ces annonces tierces. L’index ne vérifie pas la disponibilité des endpoints et ne garantit pas l’identité déclarée.
 
 ## Acheter via A2A
 
@@ -142,7 +183,9 @@ Le bot propriétaire utilise les commandes locales :
 .venv/bin/a2a-seller proposal counter --id PROPOSITION --version 1 --price 270
 ```
 
-Les trois dernières commandes sont des alternatives. Une contre-proposition génère une nouvelle version ; l’acheteur doit soumettre une nouvelle offre explicite. Le bot ne confirme jamais une proposition simplement parce qu’il vient de la notifier. Une réponse ambiguë du propriétaire demande clarification.
+Les trois dernières commandes sont des alternatives. Plusieurs offres peuvent attendre la décision du propriétaire. Une confirmation réelle marque atomiquement l’article `sold`, accepte la proposition choisie et clôt les autres propositions encore ouvertes ; une autre confirmation concurrente ne peut pas vendre le même article une deuxième fois. L’objet quitte le catalogue disponible et le helper tente de mettre à jour le registre s’il est configuré. Une confirmation fictive reste `accepted_fictive` et ne marque pas l’article vendu.
+
+Une contre-proposition génère une nouvelle version ; l’acheteur doit soumettre une nouvelle offre explicite. Le bot ne confirme jamais une proposition simplement parce qu’il vient de la notifier. Une réponse ambiguë du propriétaire demande clarification. L’état `sold` est un état du catalogue ; il n’effectue ni paiement ni remise de l’objet.
 
 `notifications pending` ne marque rien comme livré. L’acquittement n’est enregistré qu’après une notification réussie. Le bot peut utiliser une routine de son hôte pour consulter les nouveautés, ou faire cette consultation manuellement. Le paquet ne crée pas cette routine, ne réveille pas Grok et n’envoie pas lui-même de message dans sa conversation. L’acheteur retrouve la décision en consultant le statut A2A.
 
