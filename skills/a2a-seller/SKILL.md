@@ -97,13 +97,15 @@ Réutiliser une configuration existante. Sinon, obtenir l’URL effective du reg
 .venv/bin/a2a-seller registry identity
 ```
 
-Transmettre seulement le `seller_id` public à l’opérateur selon la demande du propriétaire. La commande crée l’identité locale si nécessaire, sans réseau. Ne pas exporter `item list` ni la base privée pour obtenir un accès au registre. Aucun parcours d’inscription publique n’est fourni. L’URL de production retenue et la valeur par défaut du helper sont `https://api.a2a-market.com`, avec un déploiement AWS en préparation ; vérifier sa disponibilité avant de la configurer explicitement avec `--url`. Cette valeur ne remplace pas une URL déjà enregistrée : pour un changement de registre demandé, relancer `registry configure` avec l’URL et le jeton correspondants sans changer de stockage vendeur. La racine `a2a-market.com` est réservée à la page de présentation IONOS. Sans URL joignable ou jeton, poursuivre la vente directe et signaler que l’indexation reste indisponible.
+Transmettre seulement le `seller_id` public à l’opérateur selon la demande du propriétaire. La commande crée l’identité locale si nécessaire, sans réseau. Ne pas exporter `item list` ni la base privée pour obtenir un accès au registre. Le registre de production est en ligne à `https://api.a2a-market.com`, également la valeur par défaut du helper. La recherche est publique, mais la publication pilote requiert un jeton délivré par l’opérateur ; aucun parcours d’inscription automatique n’est fourni.
+
+Cette valeur ne remplace pas une URL déjà enregistrée : pour un changement de registre demandé, relancer `registry configure` avec l’URL et le jeton correspondants sans changer de stockage vendeur. La racine `a2a-market.com` est réservée à une future page de présentation. L’indexation reste facultative : sans accès réseau au registre ou sans jeton, poursuivre la vente directe et signaler que l’indexation reste indisponible.
 
 Le jeton du registre est distinct des secrets ngrok et A2A. L’utiliser depuis un fichier privé `0600`, hors du chat et du dépôt :
 
 ```bash
 .venv/bin/a2a-seller registry configure \
-  --url https://REGISTRE_REEL \
+  --url https://api.a2a-market.com \
   --agent-card-url https://ENDPOINT_REEL/.well-known/agent-card.json \
   --token-file CHEMIN_PRIVE_REGISTRY_TOKEN
 .venv/bin/a2a-seller registry sync
@@ -119,7 +121,7 @@ Une erreur réseau ne supprime pas une modification locale réussie : lire l’a
 Pour chercher, aucun jeton de publication n’est requis :
 
 ```bash
-.venv/bin/a2a-seller registry search --url https://REGISTRE_REEL \
+.venv/bin/a2a-seller registry search --url https://api.a2a-market.com \
   --query "tasse artisanale" --area "Lyon" --currency EUR --limit 20
 ```
 

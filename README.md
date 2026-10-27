@@ -93,7 +93,9 @@ La carte et les deux catalogues ont des rôles différents : le catalogue de dé
 
 Le helper `registry` utilise le contrat HTTP d’`a2a-market-registry`. Le registre est indépendant : d’autres agents peuvent l’utiliser avec leur propre client HTTP. Il conserve les annonces publiques et l’URL de la carte ; le serveur vendeur, le prix minimum et les décisions restent ici. Un acheteur recherche un objet dans cet index puis contacte directement son vendeur via A2A.
 
-Il faut une instance réellement disponible, son URL et un jeton de publication provisionné par son opérateur pour le bon `seller_id`. L’URL de production retenue, également utilisée par défaut par le helper, est `https://api.a2a-market.com` ; son déploiement AWS est en préparation. La racine `https://a2a-market.com` est réservée à la page de présentation hébergée chez IONOS. Les exemples utilisent une URL à remplacer par celle du registre dont l’accès HTTPS a été vérifié. Aucun compte n’est créé et rien n’est publié tant que le registre n’est pas configuré. Une mise à jour du paquet ne change pas une URL déjà enregistrée : pour changer de registre, relancer `registry configure` avec son URL et le jeton correspondant, en conservant le répertoire de données du vendeur.
+Le registre de production est en ligne à [https://api.a2a-market.com](https://api.a2a-market.com), l’URL utilisée par défaut par le helper. La recherche est publique ; la publication pilote exige un jeton provisionné par l’opérateur pour le bon `seller_id`. Il n’existe pas d’inscription automatique. La racine `https://a2a-market.com` est réservée à une future page de présentation.
+
+L’indexation reste facultative : rien n’est publié tant que le registre n’est pas configuré. Une mise à jour du paquet ne change pas une URL déjà enregistrée : pour changer de registre, relancer `registry configure` avec son URL et le jeton correspondant, en conservant le répertoire de données du vendeur. Les exemples suivants utilisent le service de production ; remplacer l’URL de la carte par celle du vendeur et le chemin du jeton par son fichier privé.
 
 Afficher l’identité publique locale à transmettre à l’opérateur, sans exporter les données d’administration :
 
@@ -105,7 +107,7 @@ Cette commande crée l’identité locale si nécessaire, sans requête réseau.
 
 ```bash
 .venv/bin/a2a-seller registry configure \
-  --url https://registre.example \
+  --url https://api.a2a-market.com \
   --agent-card-url https://VOTRE-ENDPOINT.ngrok-free.app/.well-known/agent-card.json \
   --token-file /chemin/prive/registry-token
 .venv/bin/a2a-seller registry sync
@@ -121,7 +123,7 @@ Le registre expire les publications après 900 secondes sans renouvellement avec
 Rechercher sans jeton de publication, avec ou sans installation d’un vendeur local :
 
 ```bash
-.venv/bin/a2a-seller registry search --url https://registre.example \
+.venv/bin/a2a-seller registry search --url https://api.a2a-market.com \
   --query "tasse artisanale" --area "Lyon" --currency EUR \
   --max-asking-price-minor 6000 --limit 20
 ```
