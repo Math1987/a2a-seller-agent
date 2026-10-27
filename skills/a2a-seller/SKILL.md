@@ -9,7 +9,7 @@ Utiliser la bibliothèque déterministe pour exécuter les intentions du propri�
 
 ## Installer ou réutiliser
 
-Réutiliser l’installation et son répertoire de données s’ils existent. Sinon, choisir un dossier persistant accessible dans l’environnement de l’utilisateur et installer dans un environnement virtuel Python 3.10+ :
+Réutiliser l’installation et son répertoire de données s’ils existent. Sinon, choisir un dossier persistant accessible dans l’environnement de l’utilisateur et installer dans un environnement virtuel Python 3.11+ :
 
 ```bash
 python3 -m venv .venv

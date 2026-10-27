@@ -10,7 +10,7 @@ Le bot traduit cette demande en commandes structurées. La bibliothèque valide 
 
 ## Installation
 
-Python 3.10 ou supérieur. Le paquet n’est pas encore publié sur PyPI. Pour cette version de développement, installer la branche dédiée :
+Python 3.11 ou supérieur (requis par les versions de Starlette utilisées). Le paquet n’est pas encore publié sur PyPI. Pour cette version de développement, installer la branche dédiée :
 
 ```bash
 python3 -m venv .venv
