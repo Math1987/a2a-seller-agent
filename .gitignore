@@ -1,0 +1,12 @@
+private_config.json
+negotiations.db
+ngrok_authtoken.txt
+ngrok_extra.yml
+ngrok
+cloudflared
+public_base_url.txt
+*.pid
+*.log
+*.bak*
+.venv/
+__pycache__/
